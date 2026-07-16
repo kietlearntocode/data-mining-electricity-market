@@ -13,3 +13,27 @@ node_modules/
 dist/
 .vscode/
 .cursor/
+
+# AI Agent & IDE
+.agent/
+.agents/
+.agent_scratch/
+artifacts/
+scratch/
+
+# LaTeX artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+
+# Project specifics
+paper/
+temp_headers.txt
+src/models/gen_*.py
+src/models/*slides*.py
