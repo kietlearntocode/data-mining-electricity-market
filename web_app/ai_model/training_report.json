@@ -1,0 +1,85 @@
+{
+  "train": {
+    "R2": 0.9772,
+    "MAE": 7.68
+  },
+  "test": {
+    "R2": 0.7034,
+    "MAE": 16.69
+  },
+  "by_country": {
+    "DE": {
+      "R2": 0.4101,
+      "MAE": 19.31
+    },
+    "DK": {
+      "R2": 0.3163,
+      "MAE": 19.51
+    },
+    "ES": {
+      "R2": 0.7424,
+      "MAE": 13.84
+    },
+    "FR": {
+      "R2": 0.6047,
+      "MAE": 19.34
+    },
+    "IT": {
+      "R2": 0.5824,
+      "MAE": 9.58
+    },
+    "PL": {
+      "R2": 0.4337,
+      "MAE": 18.59
+    }
+  },
+  "feature_importance": {
+    "Price_Lag1": 0.39010000228881836,
+    "Price_Roll7_Mean": 0.32030001282691956,
+    "Price_Lag2": 0.12049999833106995,
+    "Price_Lag7": 0.04830000177025795,
+    "TTF_Gas_Price": 0.020800000056624413,
+    "DayOfWeek_Cos": 0.017500000074505806,
+    "DayOfWeek_Sin": 0.016899999231100082,
+    "Price_Lag14": 0.014299999922513962,
+    "Price_Roll7_Std": 0.005400000140070915,
+    "Month_Cos": 0.0052999998442828655,
+    "Coal_Price": 0.0052999998442828655,
+    "EU_Gas_Storage_Anomaly": 0.004900000058114529,
+    "Load_Lag2": 0.0038999998942017555,
+    "Load_Lag1": 0.003800000064074993,
+    "Price_Lag30": 0.003700000001117587,
+    "Brent_Oil_Price": 0.003700000001117587,
+    "Month_Sin": 0.003599999938160181,
+    "EU_ETS_Price": 0.0035000001080334187,
+    "Price_Lag365": 0.003000000026077032,
+    "Load_Lag14": 0.0027000000700354576,
+    "Load_Lag7": 0.002400000113993883
+  },
+  "model_path": "D:\\Projects\\data\\ember\\web_app\\ai_model\\daily_xgb.json",
+  "features": [
+    "TTF_Gas_Price",
+    "Coal_Price",
+    "EU_ETS_Price",
+    "Brent_Oil_Price",
+    "EU_Gas_Storage_Anomaly",
+    "DayOfWeek_Sin",
+    "DayOfWeek_Cos",
+    "Month_Sin",
+    "Month_Cos",
+    "Price_Lag1",
+    "Price_Lag2",
+    "Price_Lag7",
+    "Price_Lag14",
+    "Price_Lag30",
+    "Price_Lag365",
+    "Load_Lag1",
+    "Load_Lag2",
+    "Load_Lag7",
+    "Load_Lag14",
+    "Price_Roll7_Mean",
+    "Price_Roll7_Std"
+  ],
+  "train_period": "2019-01-01 \u2192 2025-12-31",
+  "test_period": "2026-01-01 \u2192 2025-12-31"
+}

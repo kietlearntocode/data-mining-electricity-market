@@ -1,0 +1,221 @@
+"""
+build_daily_features.py -- Feature Engineering for Daily XGBoost
+=================================================================
+Input : master_dataset_hourly.csv + recent_data.csv (optional)
+Output: daily_features_data.csv + country_scalers.json
+
+Features (21):
+  C1 macro (6): TTF_Gas_Price, Coal_Price, EU_ETS_Price, Brent_Oil_Price,
+                Residual_Load_Normalized, EU_Gas_Storage_Anomaly
+  Cyclical (4): DayOfWeek_Sin/Cos, Month_Sin/Cos
+  Lag price (6): Price_Lag1, Lag2, Lag7, Lag14, Lag30, Lag365
+  Lag load  (3): Load_Lag1, Load_Lag7, Load_Lag14
+  Rolling   (2): Price_Roll7_Mean, Price_Roll7_Std
+Target: Next_Day_Price_EUR
+"""
+
+import os, json
+import numpy as np
+import pandas as pd
+
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+MASTER_CSV  = os.path.join(BASE_DIR, "../../data/processed/master_dataset_hourly.csv")
+RECENT_CSV  = os.path.join(BASE_DIR, "recent_data.csv")
+OUTPUT_CSV  = os.path.join(BASE_DIR, "daily_features_data.csv")
+SCALER_JSON = os.path.join(BASE_DIR, "../ai_model/country_scalers.json")
+
+COUNTRIES = ["DE", "DK", "ES", "FR", "IT", "PL"]
+
+# Columns to aggregate from hourly -> daily
+DAILY_AGG = {
+    "Real_Wholesale_Price_EUR": "mean",
+    "Load":                     "mean",
+    "Renewables_MW":            "mean",
+    "TTF_Gas_Price":            "mean",
+    "Coal_Price":               "mean",
+    "EU_ETS_Price":             "mean",
+    "Brent_Oil_Price":          "mean",
+    "EU_Gas_Storage_Anomaly":   "mean",
+    "DayOfWeek_Sin":            "mean",
+    "DayOfWeek_Cos":            "mean",
+    "Month_Sin":                "mean",
+    "Month_Cos":                "mean",
+}
+
+
+FEATURE_COLS = [
+    # C1 macro (5)
+    "TTF_Gas_Price", "Coal_Price", "EU_ETS_Price", "Brent_Oil_Price",
+    "EU_Gas_Storage_Anomaly",
+    # Cyclical (4)
+    "DayOfWeek_Sin", "DayOfWeek_Cos", "Month_Sin", "Month_Cos",
+    # Lag price (6)
+    "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
+    # Lag load (4)
+    "Load_Lag1", "Load_Lag2", "Load_Lag7", "Load_Lag14",
+    # Rolling stats (2)
+    "Price_Roll7_Mean", "Price_Roll7_Std",
+]
+
+
+# =============================================================================
+def load_and_merge() -> pd.DataFrame:
+    """Load master CSV + recent_data.csv, filter 6 countries, merge."""
+    print("[1] Loading data...")
+
+    cols_needed = ["Country", "Datetime"] + list(DAILY_AGG.keys())
+
+    # Master CSV (2018-2025)
+    df_master = pd.read_csv(
+        MASTER_CSV,
+        usecols=lambda c: c in cols_needed,
+        low_memory=True
+    )
+    df_master["Datetime"] = pd.to_datetime(df_master["Datetime"], utc=True)
+    df_master = df_master[df_master["Country"].isin(COUNTRIES)]
+    print(f"   Master: {len(df_master):,} rows")
+
+    frames = [df_master]
+
+    # Recent data (2026-present)
+    if os.path.exists(RECENT_CSV):
+        df_recent = pd.read_csv(RECENT_CSV, low_memory=True)
+        df_recent["Datetime"] = pd.to_datetime(df_recent["Datetime"], utc=True)
+        df_recent = df_recent[df_recent["Country"].isin(COUNTRIES)]
+        available = [c for c in cols_needed if c in df_recent.columns]
+        df_recent = df_recent[available]
+        frames.append(df_recent)
+        print(f"   Recent: {len(df_recent):,} rows")
+
+    df = pd.concat(frames, ignore_index=True)
+    df = df.drop_duplicates(subset=["Country", "Datetime"]).sort_values(["Country", "Datetime"])
+    print(f"   Total : {len(df):,} rows")
+    return df
+
+
+# =============================================================================
+def aggregate_to_daily(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate hourly -> daily mean."""
+    print("[2] Aggregating hourly -> daily...")
+    df["Date"] = df["Datetime"].dt.date
+
+    agg_dict = {k: v for k, v in DAILY_AGG.items() if k in df.columns}
+    df_daily = df.groupby(["Country", "Date"]).agg(agg_dict).reset_index()
+    df_daily["Date"] = pd.to_datetime(df_daily["Date"])
+    df_daily = df_daily.sort_values(["Country", "Date"])
+
+    print(f"   Result: {len(df_daily):,} day-country rows")
+    return df_daily
+
+
+# =============================================================================
+def compute_residual_load(df: pd.DataFrame) -> dict:
+    """Residual_Load = Load - Renewables_MW, normalized per country (2018-2024)."""
+    print("[3] Computing Residual Load + Normalizing...")
+    df["Residual_Load"] = df["Load"] - df["Renewables_MW"]
+
+    scalers = {}
+    train_mask = df["Date"].dt.year <= 2024
+
+    for country in COUNTRIES:
+        cmask = (df["Country"] == country) & train_mask
+        vals = df.loc[cmask, "Residual_Load"].dropna()
+        rmin = float(vals.min()) if len(vals) else 0.0
+        rmax = float(vals.max()) if len(vals) else 1.0
+        scalers[country] = {"min": rmin, "max": rmax}
+
+    def normalize(row):
+        s = scalers.get(row["Country"], {"min": 0, "max": 1})
+        denom = s["max"] - s["min"]
+        if denom == 0:
+            return 0.5
+        return float(np.clip((row["Residual_Load"] - s["min"]) / denom, 0, 1))
+
+    df["Residual_Load_Normalized"] = df.apply(normalize, axis=1)
+    print(f"   Scalers computed for {len(scalers)} countries")
+    return scalers
+
+
+# =============================================================================
+def add_lags(df: pd.DataFrame) -> pd.DataFrame:
+    """Add all lag + rolling features per country."""
+    print("[4] Adding lag + rolling features...")
+
+    all_parts = []
+    for country in COUNTRIES:
+        cdf = df[df["Country"] == country].copy().sort_values("Date")
+        price = cdf["Real_Wholesale_Price_EUR"]
+        load  = cdf["Residual_Load_Normalized"]
+
+        # Price lags
+        cdf["Price_Lag1"]   = price.shift(1)
+        cdf["Price_Lag2"]   = price.shift(2)
+        cdf["Price_Lag7"]   = price.shift(7)
+        cdf["Price_Lag14"]  = price.shift(14)
+        cdf["Price_Lag30"]  = price.shift(30)
+        cdf["Price_Lag365"] = price.shift(365)
+
+        # Load lags
+        cdf["Load_Lag1"]  = load.shift(1)
+        cdf["Load_Lag2"]  = load.shift(2)
+        cdf["Load_Lag7"]  = load.shift(7)
+        cdf["Load_Lag14"] = load.shift(14)
+
+        # Rolling stats (shift first to avoid leakage)
+        price_s1 = price.shift(1)
+        cdf["Price_Roll7_Mean"] = price_s1.rolling(7, min_periods=4).mean()
+        cdf["Price_Roll7_Std"]  = price_s1.rolling(7, min_periods=4).std()
+
+        all_parts.append(cdf)
+
+    df_out = pd.concat(all_parts, ignore_index=True)
+    print("   Lags OK: Lag1/2/7/14/30/365, LoadLag1/7/14, Roll7Mean/Std")
+    return df_out
+
+
+
+
+
+# =============================================================================
+def main():
+    print("=" * 60)
+    print("BUILD DAILY FEATURES  (21 features)")
+    print("=" * 60)
+
+    df = load_and_merge()
+    df_daily = aggregate_to_daily(df)
+    scalers = compute_residual_load(df_daily)
+    df_daily = add_lags(df_daily)
+    # Drop rows with missing critical features (Lag365 needs 1 year of history)
+    before = len(df_daily)
+    df_daily = df_daily.dropna(subset=["Price_Lag365", "Real_Wholesale_Price_EUR"])
+    print(f"\n[6] Dropped {before - len(df_daily)} rows (Lag365/Target NaN)")
+    print(f"   Remaining: {len(df_daily):,} day-country rows")
+
+    # Check all feature columns present
+    missing = [c for c in FEATURE_COLS if c not in df_daily.columns]
+    if missing:
+        print(f"   [!] Missing columns: {missing}")
+    else:
+        print(f"   [OK] All {len(FEATURE_COLS)} features present")
+
+    # Save
+    df_daily.to_csv(OUTPUT_CSV, index=False)
+    print(f"\n[7] Saved: {OUTPUT_CSV}")
+
+    os.makedirs(os.path.dirname(SCALER_JSON), exist_ok=True)
+    with open(SCALER_JSON, "w") as f:
+        json.dump(scalers, f, indent=2)
+    print(f"   Saved scalers: {SCALER_JSON}")
+
+    print(f"\n{'='*60}")
+    print("Dataset summary:")
+    for country in COUNTRIES:
+        cdf = df_daily[df_daily["Country"] == country]
+        if len(cdf) > 0:
+            print(f"  {country}: {len(cdf)} days | {cdf['Date'].min().date()} -> {cdf['Date'].max().date()}")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,14 +1,22 @@
-import json
-import os
+"""
+main.py — FastAPI Daily Forecast Server
+========================================
+Endpoints:
+  GET /api/countries              → ["DE","DK","ES","FR","IT","PL"]
+  GET /api/date_range?country=DE  → {min_date, max_date, max_forecast_date}
+  GET /api/forecast?country=DE&date=2025-06-01  → 7-day rolling forecast
+"""
+
+import json, os
+import numpy as np
 import pandas as pd
 import xgboost as xgb
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
-from live_api import get_live_dashboard_data
+from datetime import timedelta
+from live_api import get_live_features
 
-app = FastAPI(title="Anonymous Weekly Forecaster API")
+app = FastAPI(title="EU Electricity Daily Forecast API", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,137 +26,288 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL_PATH = "../ai_model/weekly_xgb.json"
-DATA_PATH = "../data_pipeline/weekly_zero_shot_data.csv"
-SCALER_PATH = "../ai_model/country_scalers.json"
+# ── Paths ─────────────────────────────────────────────────────────────────────
+BASE = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH  = os.path.join(BASE, "../ai_model/daily_xgb.json")
+DATA_PATH   = os.path.join(BASE, "../data_pipeline/daily_features_data.csv")
+SCALER_PATH = os.path.join(BASE, "../ai_model/country_scalers.json")
 
-model = None
-df = None
+FEATURE_COLS = [
+    # C1 macro (5)
+    "TTF_Gas_Price", "Coal_Price", "EU_ETS_Price", "Brent_Oil_Price",
+    "EU_Gas_Storage_Anomaly",
+    # Cyclical (4)
+    "DayOfWeek_Sin", "DayOfWeek_Cos", "Month_Sin", "Month_Cos",
+    # Lag price (6)
+    "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
+    # Lag load (4)
+    "Load_Lag1", "Load_Lag2", "Load_Lag7", "Load_Lag14",
+    # Rolling stats (2)
+    "Price_Roll7_Mean", "Price_Roll7_Std",
+]
+
+
+
+COUNTRIES = ["DE", "DK", "ES", "FR", "IT", "PL"]
+
+# ── Global state ──────────────────────────────────────────────────────────────
+model   = None
+df_feat = None
 scalers = {}
 
-FEATURES = [
-    "EU_Residual_Load_Normalized",
-    "TTF_Gas_Price",
-    "Coal_Price",
-    "EU_ETS_Price",
-    "Brent_Oil_Price",
-    "EU_Gas_Storage_Anomaly",
-    "Price_Lag1",
-    "Price_Lag2",
-    "Residual_Load_Normalized_Lag1",
-    "Residual_Load_Normalized_Lag2"
-]
 
 @app.on_event("startup")
 def load_assets():
-    global model, df
+    global model, df_feat, scalers
+
     if os.path.exists(MODEL_PATH):
         model = xgb.XGBRegressor()
         model.load_model(MODEL_PATH)
-        print("Loaded Weekly XGBoost Model")
+        print(f"[OK] Model loaded: {MODEL_PATH}")
     else:
-        print("Model file not found!")
+        print(f"[WARN] Model not found: {MODEL_PATH} — run train_daily.py first")
 
     if os.path.exists(DATA_PATH):
-        df = pd.read_csv(DATA_PATH)
-        df["Datetime"] = pd.to_datetime(df["Datetime"], utc=True)
-        df = df.sort_values(by=['Country', 'Datetime'])
-        print("Loaded Weekly Historical Data")
-        
-    if os.path.exists(SCALER_PATH):
-        with open(SCALER_PATH, "r") as f:
-            scalers.update(json.load(f))
-        print(f"Loaded Residual Load Scalers for {len(scalers)} countries")
+        df_feat = pd.read_csv(DATA_PATH, low_memory=True)
+        df_feat["Date"] = pd.to_datetime(df_feat["Date"])
+        df_feat = df_feat.sort_values(["Country", "Date"])
+        print(f"[OK] Data loaded: {len(df_feat):,} rows")
+    else:
+        print(f"[WARN] Data not found: {DATA_PATH} — run build_daily_features.py first")
 
+    if os.path.exists(SCALER_PATH):
+        with open(SCALER_PATH) as f:
+            scalers.update(json.load(f))
+        print(f"[OK] Scalers loaded: {list(scalers.keys())}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Helpers
+# ═════════════════════════════════════════════════════════════════════════════
+def _cyclical(date: pd.Timestamp) -> dict:
+    dow = date.dayofweek
+    mon = date.month
+    return {
+        "DayOfWeek_Sin": float(np.sin(2 * np.pi * dow / 7)),
+        "DayOfWeek_Cos": float(np.cos(2 * np.pi * dow / 7)),
+        "Month_Sin":     float(np.sin(2 * np.pi * mon / 12)),
+        "Month_Cos":     float(np.cos(2 * np.pi * mon / 12)),
+    }
+
+
+def _get_row(country: str, date: pd.Timestamp) -> pd.Series | None:
+    """Lấy 1 row từ daily_features_data cho (country, date)."""
+    if df_feat is None:
+        return None
+    mask = (df_feat["Country"] == country) & (df_feat["Date"] == date)
+    rows = df_feat[mask]
+    return rows.iloc[0] if len(rows) > 0 else None
+
+
+def _build_feature_vector(country: str, target_date: pd.Timestamp,
+                           historical_prices: dict = None) -> dict | None:
+    """
+    Xây dựng vector features để predict giá ngày target_date.
+    Features là thông tin của ngày T-1 (hôm trước target_date).
+    """
+    if historical_prices is None:
+        historical_prices = {}
+        
+    prev_date = target_date - timedelta(days=1)
+
+    # ── Macro C1: lấy từ historical hoặc live API ─────────────────────────
+    prev_row = _get_row(country, prev_date)
+
+    if prev_row is not None:
+        macro = {
+            "TTF_Gas_Price":          float(prev_row.get("TTF_Gas_Price", 40.0)),
+            "Coal_Price":             float(prev_row.get("Coal_Price", 100.0)),
+            "EU_ETS_Price":           float(prev_row.get("EU_ETS_Price", 70.0)),
+            "Brent_Oil_Price":        float(prev_row.get("Brent_Oil_Price", 80.0)),
+            "EU_Gas_Storage_Anomaly": float(prev_row.get("EU_Gas_Storage_Anomaly", 0.0)),
+        }
+    else:
+        macro = {
+            "TTF_Gas_Price": 40.0, "Coal_Price": 100.0,
+            "EU_ETS_Price": 70.0, "Brent_Oil_Price": 80.0,
+            "EU_Gas_Storage_Anomaly": 0.0,
+        }
+
+    # ── Cyclical: tính từ target_date ────────────────────────────────────
+    cyc = _cyclical(target_date)
+
+    # ── Lag features ─────────────────────────────────────────────────────
+    def _price(date):
+        if date in historical_prices:
+            return float(historical_prices[date])
+        r = _get_row(country, date)
+        if r is not None and not pd.isna(r.get("Real_Wholesale_Price_EUR")):
+            return float(r["Real_Wholesale_Price_EUR"])
+        return 60.0
+
+    def _load(date):
+        r = _get_row(country, date)
+        if r is not None and not pd.isna(r.get("Residual_Load_Normalized")):
+            return float(r["Residual_Load_Normalized"])
+        return 0.5
+
+    # Lấy các lag prices 
+    price_lag1  = _price(target_date - timedelta(days=1))
+    price_lag2  = _price(target_date - timedelta(days=2))
+    price_lag7  = _price(target_date - timedelta(days=7))
+    price_lag14 = _price(target_date - timedelta(days=14))
+    price_lag30 = _price(target_date - timedelta(days=30))
+    price_lag365= _price(target_date - timedelta(days=365))
+
+    load_lag1  = _load(target_date - timedelta(days=1))
+    load_lag2  = _load(target_date - timedelta(days=2))
+    load_lag7  = _load(target_date - timedelta(days=7))
+    load_lag14 = _load(target_date - timedelta(days=14))
+
+    # Rolling 7-day mean/std (from T-7 to T-1)
+    roll_prices = [_price(target_date - timedelta(days=i)) for i in range(1, 8)]
+    roll7_mean = float(np.mean(roll_prices))
+    roll7_std  = float(np.std(roll_prices))
+
+    lags = {
+        "Price_Lag1": price_lag1, "Price_Lag2": price_lag2,
+        "Price_Lag7": price_lag7, "Price_Lag14": price_lag14,
+        "Price_Lag30": price_lag30, "Price_Lag365": price_lag365,
+        "Load_Lag1": load_lag1, "Load_Lag2": load_lag2, "Load_Lag7": load_lag7, "Load_Lag14": load_lag14,
+        "Price_Roll7_Mean": roll7_mean, "Price_Roll7_Std": roll7_std,
+    }
+
+
+
+
+    return {**macro, **cyc, **lags}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Endpoints
+# ═════════════════════════════════════════════════════════════════════════════
 @app.get("/api/countries")
 def get_countries():
-    return list(scalers.keys())
+    if scalers:
+        return sorted(scalers.keys())
+    return COUNTRIES
 
-@app.get("/api/fetch_live")
-def fetch_live_data(country: str = "DE"):
-    try:
-        data = get_live_dashboard_data(country)
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/historical/EU")
-def get_historical_eu(weeks: int = 52):
-    if df is None or df.empty:
+@app.get("/api/date_range")
+def get_date_range(country: str = Query("DE")):
+    if df_feat is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
-    
-    df_sorted = df.sort_values("Datetime")
-    df_sorted["Date"] = df_sorted["Datetime"].dt.date
-    recent = df_sorted.tail(weeks)
-    
+    cdf = df_feat[df_feat["Country"] == country]
+    if cdf.empty:
+        raise HTTPException(status_code=404, detail=f"No data for {country}")
+
+    max_date = cdf["Date"].max()
+    min_date = cdf["Date"].min()
+    max_forecast = max_date + timedelta(days=7)
+
     return {
-        "dates": recent["Date"].astype(str).tolist(),
-        "prices": recent["Real_Wholesale_Price_EUR"].tolist(),
-        "residual_load_norm": recent["EU_Residual_Load_Normalized"].tolist(),
-        "gas_price": recent["TTF_Gas_Price"].tolist(),
-        "coal_price": recent["Coal_Price"].tolist(),
-        "ets_price": recent["EU_ETS_Price"].tolist(),
-        "oil_price": recent["Brent_Oil_Price"].tolist(),
-        "gas_anomaly": recent["EU_Gas_Storage_Anomaly"].tolist(),
+        "country":            country,
+        "min_date":           min_date.strftime("%Y-%m-%d"),
+        "max_date":           max_date.strftime("%Y-%m-%d"),
+        "max_forecast_date":  max_forecast.strftime("%Y-%m-%d"),
     }
 
-class PredictRequest(BaseModel):
-    country_code: str
-    eu_load_mw: float
-    eu_renewables_mw: float
-    ttf_gas_price: float
-    coal_price: float
-    eu_ets_price: float
-    brent_oil_price: float
-    eu_gas_storage_anomaly: float
 
-@app.post("/api/predict_weekly")
-def predict_price(req: PredictRequest):
+@app.get("/api/forecast")
+def get_forecast(
+    country: str = Query("DE", description="Country ISO-2"),
+    date:    str = Query(...,   description="Start date YYYY-MM-DD"),
+):
     if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded")
-        
-    country_scaler = scalers.get(req.country_code)
-    if not country_scaler:
-        raise HTTPException(status_code=400, detail=f"No scaler found for {req.country_code}")
-        
-    # Tính Tải dư và Chuẩn hóa
-    residual_load = req.eu_load_mw - req.eu_renewables_mw
-    norm_load = (residual_load - country_scaler["min"]) / (country_scaler["max"] - country_scaler["min"])
-    norm_load = max(0.0, min(1.0, norm_load))
-            
-    # Lấy tự động Lag Features từ Lịch sử
-    price_lag1 = 40.0
-    price_lag2 = 40.0
-    res_lag1 = 0.5
-    res_lag2 = 0.5
-    
-    if df is not None:
-        country_df = df[df["Country"] == req.country_code]
-        if len(country_df) > 0:
-            last_row = country_df.iloc[-1]
-            price_lag1 = float(last_row["Real_Wholesale_Price_EUR"])
-            price_lag2 = float(last_row["Price_Lag1"])
-            res_lag1 = float(last_row["EU_Residual_Load_Normalized"])
-            res_lag2 = float(last_row["Residual_Load_Normalized_Lag1"])
-            
-    X = pd.DataFrame([{
-        "EU_Residual_Load_Normalized": norm_load,
-        "TTF_Gas_Price": req.ttf_gas_price,
-        "Coal_Price": req.coal_price,
-        "EU_ETS_Price": req.eu_ets_price,
-        "Brent_Oil_Price": req.brent_oil_price,
-        "EU_Gas_Storage_Anomaly": req.eu_gas_storage_anomaly,
-        "Price_Lag1": price_lag1,
-        "Price_Lag2": price_lag2,
-        "Residual_Load_Normalized_Lag1": res_lag1,
-        "Residual_Load_Normalized_Lag2": res_lag2
-    }])
-    
-    y_pred = model.predict(X)[0]
-    
+        raise HTTPException(status_code=500, detail="Model not loaded — run train_daily.py")
+    if df_feat is None:
+        raise HTTPException(status_code=500, detail="Data not loaded — run build_daily_features.py")
+
+    try:
+        start_date = pd.Timestamp(date)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid date format — use YYYY-MM-DD")
+
+    if country not in COUNTRIES:
+        raise HTTPException(status_code=400, detail=f"Country must be one of {COUNTRIES}")
+
+    # Giới hạn max forecast
+    if df_feat is not None:
+        cdf = df_feat[df_feat["Country"] == country]
+        max_hist = cdf["Date"].max() if not cdf.empty else pd.Timestamp("2025-12-31")
+    else:
+        max_hist = pd.Timestamp("2025-12-31")
+
+    max_allowed = max_hist + timedelta(days=7)
+    if start_date > max_allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Date too far in future. Max allowed: {max_allowed.strftime('%Y-%m-%d')}"
+        )
+
+    # ── Rolling 7-day forecast ─────────────────────────────────────────────
+    results = []
+    historical_prices = {}
+
+    for i in range(7):
+        forecast_date = start_date + timedelta(days=i)
+
+        feat_vec = _build_feature_vector(country, forecast_date, historical_prices)
+        if feat_vec is None:
+            break
+
+        X = pd.DataFrame([feat_vec])[FEATURE_COLS]
+        predicted = float(model.predict(X)[0])
+
+        # Lấy actual nếu có trong lịch sử
+        actual_row = _get_row(country, forecast_date)
+        actual = float(actual_row["Real_Wholesale_Price_EUR"]) if actual_row is not None and not pd.isna(actual_row.get("Real_Wholesale_Price_EUR")) else None
+
+        results.append({
+            "date":      forecast_date.strftime("%Y-%m-%d"),
+            "weekday":   forecast_date.strftime("%A"),
+            "predicted": round(predicted, 2),
+            "actual":    round(actual, 2) if actual is not None else None,
+            "inputs":    {k: round(float(v), 4) for k, v in feat_vec.items()},
+        })
+
+        # Lưu vào historical_prices để dùng làm lag cho những ngày tiếp theo trong vòng lặp 7 ngày.
+        # Ưu tiên dùng actual (ground truth), nếu tương lai không có actual thì dùng predicted
+        historical_prices[forecast_date] = actual if actual is not None else predicted
+
+    if not results:
+        raise HTTPException(status_code=500, detail="Không thể tạo forecast")
+
+    # Macro snapshot (từ ngày đầu tiên)
+    inputs_snapshot = results[0]["inputs"] if results else {}
+
     return {
-        "predicted_next_week_price_eur": float(y_pred)
+        "country":        country,
+        "forecast_start": date,
+        "mode":           "backtest" if results[0]["actual"] is not None else "forecast",
+        "data_last_date": max_hist.strftime("%Y-%m-%d"),
+        "forecast":       results,
+        "macro_snapshot": {
+            "TTF_Gas_Price":           inputs_snapshot.get("TTF_Gas_Price"),
+            "Coal_Price":              inputs_snapshot.get("Coal_Price"),
+            "EU_ETS_Price":            inputs_snapshot.get("EU_ETS_Price"),
+            "Brent_Oil_Price":         inputs_snapshot.get("Brent_Oil_Price"),
+            "Residual_Load_Normalized":inputs_snapshot.get("Residual_Load_Normalized"),
+            "EU_Gas_Storage_Anomaly":  inputs_snapshot.get("EU_Gas_Storage_Anomaly"),
+        }
     }
+
+
+@app.get("/api/health")
+def health():
+    return {
+        "status": "ok",
+        "model_loaded": model is not None,
+        "data_loaded":  df_feat is not None,
+        "countries":    COUNTRIES,
+        "data_rows":    len(df_feat) if df_feat is not None else 0,
+    }
+
 
 if __name__ == "__main__":
     import uvicorn
