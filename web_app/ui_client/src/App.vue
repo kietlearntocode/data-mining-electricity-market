@@ -195,14 +195,16 @@ use([LineChart, GridComponent, TooltipComponent, LegendComponent,
 const API_BASE = 'http://localhost:8000'
 
 const countryNames = {
-  DE: 'Germany', DK: 'Denmark', ES: 'Spain',
-  FR: 'France',  IT: 'Italy',   PL: 'Poland',
+  BE: 'Belgium', CZ: 'Czechia', DE: 'Germany', DK: 'Denmark', ES: 'Spain',
+  FI: 'Finland', FR: 'France', GB: 'Great Britain', HU: 'Hungary',
+  IE: 'Ireland', IT: 'Italy', NL: 'Netherlands', NO: 'Norway',
+  PL: 'Poland', PT: 'Portugal', SE: 'Sweden', SK: 'Slovakia'
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
 const loading        = ref(false)
 const error          = ref(null)
-const countries      = ref(['DE', 'DK', 'ES', 'FR', 'IT', 'PL'])
+const countries      = ref(Object.keys(countryNames))
 const selectedCountry = ref('DE')
 const selectedDate   = ref('')
 const dateRange      = ref({ min_date: '2019-01-01', max_date: '2025-12-31', max_forecast_date: '2026-01-07' })

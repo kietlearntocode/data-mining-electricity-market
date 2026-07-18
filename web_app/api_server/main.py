@@ -31,6 +31,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH  = os.path.join(BASE, "../ai_model/daily_xgb.json")
 DATA_PATH   = os.path.join(BASE, "../data_pipeline/daily_features_data.csv")
 SCALER_PATH = os.path.join(BASE, "../ai_model/country_scalers.json")
+PROFILE_PATH = os.path.join(BASE, "../data_pipeline/country_profiles.json")
 
 FEATURE_COLS = [
     # C1 macro (5)
@@ -44,21 +45,25 @@ FEATURE_COLS = [
     "Load_Lag1", "Load_Lag2", "Load_Lag7", "Load_Lag14",
     # Rolling stats (2)
     "Price_Roll7_Mean", "Price_Roll7_Std",
+    # Country Profiles (3)
+    "Country_Avg_Load", "Country_Avg_Residual_Load", "Country_Avg_Price"
 ]
 
-
-
-COUNTRIES = ["DE", "DK", "ES", "FR", "IT", "PL"]
+COUNTRIES = [
+    "BE", "CZ", "DE", "DK", "ES", "FI", "FR", "GB", 
+    "HU", "IE", "IT", "NL", "NO", "PL", "PT", "SE", "SK"
+]
 
 # ── Global state ──────────────────────────────────────────────────────────────
 model   = None
 df_feat = None
 scalers = {}
+country_profiles_dict = {}
 
 
 @app.on_event("startup")
 def load_assets():
-    global model, df_feat, scalers
+    global model, df_feat, scalers, country_profiles_dict
 
     if os.path.exists(MODEL_PATH):
         model = xgb.XGBRegressor()
@@ -79,6 +84,13 @@ def load_assets():
         with open(SCALER_PATH) as f:
             scalers.update(json.load(f))
         print(f"[OK] Scalers loaded: {list(scalers.keys())}")
+
+    if os.path.exists(PROFILE_PATH):
+        with open(PROFILE_PATH) as f:
+            country_profiles_dict.update(json.load(f))
+        print(f"[OK] Country Profiles loaded: {len(country_profiles_dict)} countries")
+    else:
+        print(f"[WARN] Profiles not found: {PROFILE_PATH}")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -177,10 +189,15 @@ def _build_feature_vector(country: str, target_date: pd.Timestamp,
         "Price_Roll7_Mean": roll7_mean, "Price_Roll7_Std": roll7_std,
     }
 
+    # ── Country Profiles ──────────────────────────────────────────────────
+    c_prof = country_profiles_dict.get(country, {})
+    prof = {
+        "Country_Avg_Load": c_prof.get("Country_Avg_Load", 0.0),
+        "Country_Avg_Residual_Load": c_prof.get("Country_Avg_Residual_Load", 0.0),
+        "Country_Avg_Price": c_prof.get("Country_Avg_Price", 0.0),
+    }
 
-
-
-    return {**macro, **cyc, **lags}
+    return {**macro, **cyc, **lags, **prof}
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,87 @@
+{
+    "BE": {
+        "Country_Avg_Load": 9416.8981,
+        "Country_Avg_Residual_Load": 7303.2238,
+        "Country_Avg_Price": 77.6577
+    },
+    "CZ": {
+        "Country_Avg_Load": 7312.2608,
+        "Country_Avg_Residual_Load": 6645.5414,
+        "Country_Avg_Price": 72.076
+    },
+    "DE": {
+        "Country_Avg_Load": 55164.1217,
+        "Country_Avg_Residual_Load": 30532.7018,
+        "Country_Avg_Price": 76.0813
+    },
+    "DK": {
+        "Country_Avg_Load": 4015.3517,
+        "Country_Avg_Residual_Load": 1288.5037,
+        "Country_Avg_Price": 73.2609
+    },
+    "ES": {
+        "Country_Avg_Load": 27415.2411,
+        "Country_Avg_Residual_Load": 17159.4387,
+        "Country_Avg_Price": 70.6296
+    },
+    "FI": {
+        "Country_Avg_Load": 9368.2408,
+        "Country_Avg_Residual_Load": 7278.0914,
+        "Country_Avg_Price": 55.7391
+    },
+    "FR": {
+        "Country_Avg_Load": 51109.0726,
+        "Country_Avg_Residual_Load": 44291.8912,
+        "Country_Avg_Price": 81.4523
+    },
+    "GB": {
+        "Country_Avg_Load": 17792.5065,
+        "Country_Avg_Residual_Load": 13430.7307,
+        "Country_Avg_Price": 47.6505
+    },
+    "HU": {
+        "Country_Avg_Load": 4939.1931,
+        "Country_Avg_Residual_Load": 4405.5512,
+        "Country_Avg_Price": 75.9217
+    },
+    "IE": {
+        "Country_Avg_Load": 3600.3227,
+        "Country_Avg_Residual_Load": 2382.4635,
+        "Country_Avg_Price": 103.1382
+    },
+    "IT": {
+        "Country_Avg_Load": 32406.438,
+        "Country_Avg_Residual_Load": 26275.225,
+        "Country_Avg_Price": 106.2637
+    },
+    "NL": {
+        "Country_Avg_Load": 12618.1883,
+        "Country_Avg_Residual_Load": 10912.8666,
+        "Country_Avg_Price": 78.5874
+    },
+    "NO": {
+        "Country_Avg_Load": 15411.1136,
+        "Country_Avg_Residual_Load": 14194.6294,
+        "Country_Avg_Price": 45.9122
+    },
+    "PL": {
+        "Country_Avg_Load": 19114.1853,
+        "Country_Avg_Residual_Load": 15888.2618,
+        "Country_Avg_Price": 70.7119
+    },
+    "PT": {
+        "Country_Avg_Load": 5775.172,
+        "Country_Avg_Residual_Load": 3632.1185,
+        "Country_Avg_Price": 71.7338
+    },
+    "SE": {
+        "Country_Avg_Load": 15273.6004,
+        "Country_Avg_Residual_Load": 11827.5754,
+        "Country_Avg_Price": 45.5458
+    },
+    "SK": {
+        "Country_Avg_Load": 3141.0656,
+        "Country_Avg_Residual_Load": 2987.4192,
+        "Country_Avg_Price": 77.7088
+    }
+}

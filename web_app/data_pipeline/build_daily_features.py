@@ -24,7 +24,10 @@ RECENT_CSV  = os.path.join(BASE_DIR, "recent_data.csv")
 OUTPUT_CSV  = os.path.join(BASE_DIR, "daily_features_data.csv")
 SCALER_JSON = os.path.join(BASE_DIR, "../ai_model/country_scalers.json")
 
-COUNTRIES = ["DE", "DK", "ES", "FR", "IT", "PL"]
+COUNTRIES = [
+    "BE", "CZ", "DE", "DK", "ES", "FI", "FR", "GB", 
+    "HU", "IE", "IT", "NL", "NO", "PL", "PT", "SE", "SK"
+]
 
 # Columns to aggregate from hourly -> daily
 DAILY_AGG = {
@@ -55,6 +58,8 @@ FEATURE_COLS = [
     "Load_Lag1", "Load_Lag2", "Load_Lag7", "Load_Lag14",
     # Rolling stats (2)
     "Price_Roll7_Mean", "Price_Roll7_Std",
+    # Country Profiles (3)
+    "Country_Avg_Load", "Country_Avg_Residual_Load", "Country_Avg_Price"
 ]
 
 
@@ -177,15 +182,39 @@ def add_lags(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # =============================================================================
+def add_country_profiles(df: pd.DataFrame) -> pd.DataFrame:
+    """Inject the 3 continuous profile features (Avg Load, Avg Residual Load, Avg Price)."""
+    print("[5] Injecting Country Profiles...")
+    profile_path = os.path.join(BASE_DIR, "country_profiles.json")
+    if not os.path.exists(profile_path):
+        raise FileNotFoundError(f"Missing {profile_path}. Run build_country_profiles.py first.")
+    
+    with open(profile_path, "r") as f:
+        profiles = json.load(f)
+        
+    def get_profile_val(country, key):
+        return profiles.get(country, {}).get(key, 0.0)
+
+    df["Country_Avg_Load"] = df["Country"].apply(lambda c: get_profile_val(c, "Country_Avg_Load"))
+    df["Country_Avg_Residual_Load"] = df["Country"].apply(lambda c: get_profile_val(c, "Country_Avg_Residual_Load"))
+    df["Country_Avg_Price"] = df["Country"].apply(lambda c: get_profile_val(c, "Country_Avg_Price"))
+    
+    print("   Injected 3 profile features for all rows.")
+    return df
+
+
+# =============================================================================
 def main():
     print("=" * 60)
-    print("BUILD DAILY FEATURES  (21 features)")
+    print("BUILD DAILY FEATURES  (24 features, 17 countries)")
     print("=" * 60)
 
     df = load_and_merge()
     df_daily = aggregate_to_daily(df)
     scalers = compute_residual_load(df_daily)
     df_daily = add_lags(df_daily)
+    df_daily = add_country_profiles(df_daily)
+    
     # Drop rows with missing critical features (Lag365 needs 1 year of history)
     before = len(df_daily)
     df_daily = df_daily.dropna(subset=["Price_Lag365", "Real_Wholesale_Price_EUR"])

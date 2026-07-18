@@ -20,7 +20,10 @@ DATA_PATH   = os.path.join(BASE_DIR, "../data_pipeline/daily_features_data.csv")
 MODEL_PATH  = os.path.join(BASE_DIR, "daily_xgb.json")
 REPORT_PATH = os.path.join(BASE_DIR, "training_report.json")
 
-COUNTRIES = ["DE", "DK", "ES", "FR", "IT", "PL"]
+COUNTRIES = [
+    "BE", "CZ", "DE", "DK", "ES", "FI", "FR", "GB", 
+    "HU", "IE", "IT", "NL", "NO", "PL", "PT", "SE", "SK"
+]
 
 FEATURE_COLS = [
     # C1 macro (5)
@@ -32,8 +35,10 @@ FEATURE_COLS = [
     "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
     # Lag load (4)
     "Load_Lag1", "Load_Lag2", "Load_Lag7", "Load_Lag14",
-    # Rolling stats (2)
+    # Rolling (2)
     "Price_Roll7_Mean", "Price_Roll7_Std",
+    # Country Profiles (3)
+    "Country_Avg_Load", "Country_Avg_Residual_Load", "Country_Avg_Price"
 ]
 
 

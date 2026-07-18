@@ -30,14 +30,25 @@ BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 MASTER_CSV  = os.path.join(BASE_DIR, "../../data/processed/master_dataset_hourly.csv")
 RECENT_CSV  = os.path.join(BASE_DIR, "recent_data.csv")
 
-# ── 6 nước train + mã ENTSO-E ─────────────────────────────────────────────────
+# ── 17 nước train + mã ENTSO-E ─────────────────────────────────────────────────
 COUNTRIES = {
+    "BE": "BE",      # Belgium
+    "CZ": "CZ",      # Czechia
     "DE": "DE_LU",   # Germany-Luxembourg
     "DK": "DK_1",    # Denmark West
     "ES": "ES",      # Spain
+    "FI": "FI",      # Finland
     "FR": "FR",      # France
+    "GB": "GB",      # Great Britain
+    "HU": "HU",      # Hungary
+    "IE": "IE",      # Ireland
     "IT": "IT_NORD", # Italy North
+    "NL": "NL",      # Netherlands
+    "NO": "NO_1",    # Norway 1 (Oslo)
     "PL": "PL",      # Poland
+    "PT": "PT",      # Portugal
+    "SE": "SE_3",    # Sweden 3 (Stockholm)
+    "SK": "SK",      # Slovakia
 }
 
 RENEWABLE_TYPES = [
