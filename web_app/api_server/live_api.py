@@ -178,6 +178,36 @@ def get_live_features(country: str) -> dict:
     return result
 
 
+def fetch_live_actual_prices(country_code: str, start_date_str: str, days: int = 7) -> dict:
+    """Lấy mảng Day-ahead Prices thật từ ENTSO-E cho khoảng thời gian tương lai."""
+    if not ENTSOE_KEY:
+        return {}
+    try:
+        from entsoe import EntsoePandasClient
+        client = EntsoePandasClient(api_key=ENTSOE_KEY)
+        
+        start = pd.Timestamp(start_date_str, tz="Europe/Brussels")
+        end = start + pd.Timedelta(days=days)
+        entsoe_code = ENTSOE_CODES.get(country_code, country_code)
+        
+        prices = client.query_day_ahead_prices(entsoe_code, start=start, end=end)
+        
+        if isinstance(prices, (pd.Series, pd.DataFrame)):
+            if isinstance(prices, pd.DataFrame):
+                prices = prices.iloc[:, 0]
+            prices_daily = prices.resample('D').mean()
+            
+            result = {}
+            for date_idx, val in prices_daily.items():
+                date_key = date_idx.strftime("%Y-%m-%d")
+                if not pd.isna(val):
+                    result[date_key] = float(val)
+            return result
+    except Exception as e:
+        print(f"  [live] fetch_live_actual_prices error: {e}")
+    return {}
+
+
 if __name__ == "__main__":
     print("Test live_api.py:")
     for c in ["DE", "FR"]:

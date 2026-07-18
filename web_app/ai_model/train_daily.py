@@ -26,17 +26,20 @@ COUNTRIES = [
 ]
 
 FEATURE_COLS = [
-    # C1 macro (5)
-    "TTF_Gas_Price", "Coal_Price", "EU_ETS_Price", "Brent_Oil_Price",
-    "EU_Gas_Storage_Anomaly",
+    # C1 macro (15 biến: 3 mốc thời gian cho 5 loại)
+    "TTF_Gas_Lag2", "TTF_Gas_Lag3", "TTF_Gas_Lag14",
+    "Coal_Lag2", "Coal_Lag3", "Coal_Lag14",
+    "EU_ETS_Lag2", "EU_ETS_Lag3", "EU_ETS_Lag14",
+    "Brent_Oil_Lag2", "Brent_Oil_Lag3", "Brent_Oil_Lag14",
+    "EU_Gas_Storage_Lag2", "EU_Gas_Storage_Lag3", "EU_Gas_Storage_Lag14",
     # Cyclical (4)
     "DayOfWeek_Sin", "DayOfWeek_Cos", "Month_Sin", "Month_Cos",
     # Lag price (6)
     "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
     # Lag load (4)
-    "Load_Lag1", "Load_Lag2", "Load_Lag7", "Load_Lag14",
-    # Rolling (2)
-    "Price_Roll7_Mean", "Price_Roll7_Std",
+    "Load_Lag2", "Load_Lag3", "Load_Lag7", "Load_Lag14",
+    # Rolling stats (3)
+    "Price_Roll7_Mean", "Price_Roll7_Std", "Load_Roll7_Mean",
     # Country Profiles (3)
     "Country_Avg_Load", "Country_Avg_Residual_Load", "Country_Avg_Price"
 ]

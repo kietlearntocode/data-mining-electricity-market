@@ -1,71 +1,92 @@
 {
   "train": {
-    "R2": 0.9567,
-    "MAE": 9.12
+    "R2": 0.9544,
+    "MAE": 9.35
   },
   "test": {
-    "R2": 0.6954,
-    "MAE": 16.94
+    "R2": 0.6921,
+    "MAE": 17.13
   },
   "by_country": {
     "DE": {
-      "R2": 0.3766,
-      "MAE": 20.23
+      "R2": 0.3592,
+      "MAE": 20.48
     },
     "DK": {
-      "R2": 0.2986,
-      "MAE": 19.8
+      "R2": 0.3034,
+      "MAE": 19.81
     },
     "ES": {
-      "R2": 0.7592,
-      "MAE": 13.3
+      "R2": 0.7542,
+      "MAE": 13.54
     },
     "FR": {
-      "R2": 0.6323,
-      "MAE": 18.37
+      "R2": 0.6259,
+      "MAE": 18.58
     },
     "IT": {
-      "R2": 0.5672,
-      "MAE": 9.87
+      "R2": 0.5066,
+      "MAE": 10.4
     },
     "PL": {
-      "R2": 0.3694,
-      "MAE": 20.05
+      "R2": 0.3822,
+      "MAE": 19.97
     }
   },
   "feature_importance": {
-    "Price_Lag1": 0.6686999797821045,
-    "Price_Roll7_Mean": 0.18250000476837158,
-    "DayOfWeek_Cos": 0.02019999921321869,
-    "DayOfWeek_Sin": 0.016499999910593033,
-    "TTF_Gas_Price": 0.013299999758601189,
-    "Price_Lag7": 0.012600000016391277,
-    "Price_Lag14": 0.00930000003427267,
-    "Month_Sin": 0.0071000000461936,
-    "Coal_Price": 0.006500000134110451,
-    "Country_Avg_Price": 0.006099999882280827,
-    "EU_ETS_Price": 0.005100000184029341,
-    "Price_Lag2": 0.005100000184029341,
-    "Month_Cos": 0.004999999888241291,
-    "EU_Gas_Storage_Anomaly": 0.004900000058114529,
-    "Brent_Oil_Price": 0.004699999932199717,
-    "Country_Avg_Load": 0.004699999932199717,
-    "Country_Avg_Residual_Load": 0.0044999998062849045,
-    "Load_Lag1": 0.004000000189989805,
-    "Load_Lag2": 0.003800000064074993,
-    "Price_Roll7_Std": 0.003700000001117587,
-    "Price_Lag30": 0.0035000001080334187,
-    "Price_Lag365": 0.0035000001080334187,
-    "Load_Lag14": 0.0024999999441206455,
-    "Load_Lag7": 0.002199999988079071
+    "Price_Lag1": 0.6064000129699707,
+    "Price_Roll7_Mean": 0.15690000355243683,
+    "Price_Lag2": 0.039400000125169754,
+    "DayOfWeek_Cos": 0.021199999377131462,
+    "DayOfWeek_Sin": 0.015599999576807022,
+    "Price_Lag7": 0.013500000350177288,
+    "Price_Lag14": 0.012400000356137753,
+    "TTF_Gas_Lag2": 0.011300000362098217,
+    "TTF_Gas_Lag3": 0.008700000122189522,
+    "EU_Gas_Storage_Lag2": 0.006500000134110451,
+    "Month_Cos": 0.006300000008195639,
+    "Coal_Lag2": 0.006099999882280827,
+    "Coal_Lag3": 0.006000000052154064,
+    "TTF_Gas_Lag14": 0.005900000222027302,
+    "EU_ETS_Lag14": 0.00559999980032444,
+    "EU_ETS_Lag3": 0.005499999970197678,
+    "EU_ETS_Lag2": 0.0052999998442828655,
+    "Coal_Lag14": 0.005100000184029341,
+    "Country_Avg_Price": 0.004999999888241291,
+    "Month_Sin": 0.004999999888241291,
+    "Country_Avg_Residual_Load": 0.004999999888241291,
+    "EU_Gas_Storage_Lag14": 0.004999999888241291,
+    "EU_Gas_Storage_Lag3": 0.004699999932199717,
+    "Brent_Oil_Lag14": 0.004100000020116568,
+    "Brent_Oil_Lag3": 0.004000000189989805,
+    "Price_Roll7_Std": 0.003800000064074993,
+    "Brent_Oil_Lag2": 0.003800000064074993,
+    "Country_Avg_Load": 0.003700000001117587,
+    "Price_Lag30": 0.003700000001117587,
+    "Load_Lag2": 0.003100000089034438,
+    "Price_Lag365": 0.003100000089034438,
+    "Load_Roll7_Mean": 0.002400000113993883,
+    "Load_Lag3": 0.002199999988079071,
+    "Load_Lag14": 0.002099999925121665,
+    "Load_Lag7": 0.0019000000320374966
   },
   "model_path": "D:\\Projects\\data\\ember\\web_app\\ai_model\\daily_xgb.json",
   "features": [
-    "TTF_Gas_Price",
-    "Coal_Price",
-    "EU_ETS_Price",
-    "Brent_Oil_Price",
-    "EU_Gas_Storage_Anomaly",
+    "TTF_Gas_Lag2",
+    "TTF_Gas_Lag3",
+    "TTF_Gas_Lag14",
+    "Coal_Lag2",
+    "Coal_Lag3",
+    "Coal_Lag14",
+    "EU_ETS_Lag2",
+    "EU_ETS_Lag3",
+    "EU_ETS_Lag14",
+    "Brent_Oil_Lag2",
+    "Brent_Oil_Lag3",
+    "Brent_Oil_Lag14",
+    "EU_Gas_Storage_Lag2",
+    "EU_Gas_Storage_Lag3",
+    "EU_Gas_Storage_Lag14",
     "DayOfWeek_Sin",
     "DayOfWeek_Cos",
     "Month_Sin",
@@ -76,12 +97,13 @@
     "Price_Lag14",
     "Price_Lag30",
     "Price_Lag365",
-    "Load_Lag1",
     "Load_Lag2",
+    "Load_Lag3",
     "Load_Lag7",
     "Load_Lag14",
     "Price_Roll7_Mean",
     "Price_Roll7_Std",
+    "Load_Roll7_Mean",
     "Country_Avg_Load",
     "Country_Avg_Residual_Load",
     "Country_Avg_Price"

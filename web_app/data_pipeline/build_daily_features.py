@@ -47,17 +47,20 @@ DAILY_AGG = {
 
 
 FEATURE_COLS = [
-    # C1 macro (5)
-    "TTF_Gas_Price", "Coal_Price", "EU_ETS_Price", "Brent_Oil_Price",
-    "EU_Gas_Storage_Anomaly",
+    # C1 macro (15 biến: 3 mốc thời gian cho 5 loại)
+    "TTF_Gas_Lag2", "TTF_Gas_Lag3", "TTF_Gas_Lag14",
+    "Coal_Lag2", "Coal_Lag3", "Coal_Lag14",
+    "EU_ETS_Lag2", "EU_ETS_Lag3", "EU_ETS_Lag14",
+    "Brent_Oil_Lag2", "Brent_Oil_Lag3", "Brent_Oil_Lag14",
+    "EU_Gas_Storage_Lag2", "EU_Gas_Storage_Lag3", "EU_Gas_Storage_Lag14",
     # Cyclical (4)
     "DayOfWeek_Sin", "DayOfWeek_Cos", "Month_Sin", "Month_Cos",
     # Lag price (6)
     "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
     # Lag load (4)
-    "Load_Lag1", "Load_Lag2", "Load_Lag7", "Load_Lag14",
-    # Rolling stats (2)
-    "Price_Roll7_Mean", "Price_Roll7_Std",
+    "Load_Lag2", "Load_Lag3", "Load_Lag7", "Load_Lag14",
+    # Rolling stats (3)
+    "Price_Roll7_Mean", "Price_Roll7_Std", "Load_Roll7_Mean",
     # Country Profiles (3)
     "Country_Avg_Load", "Country_Avg_Residual_Load", "Country_Avg_Price"
 ]
@@ -160,21 +163,42 @@ def add_lags(df: pd.DataFrame) -> pd.DataFrame:
         cdf["Price_Lag30"]  = price.shift(30)
         cdf["Price_Lag365"] = price.shift(365)
 
-        # Load lags
-        cdf["Load_Lag1"]  = load.shift(1)
+        # Macro lags (Lag 2, Lag 3, Lag 14)
+        cdf["TTF_Gas_Lag2"] = cdf["TTF_Gas_Price"].shift(2)
+        cdf["TTF_Gas_Lag3"] = cdf["TTF_Gas_Price"].shift(3)
+        cdf["TTF_Gas_Lag14"] = cdf["TTF_Gas_Price"].shift(14)
+
+        cdf["Coal_Lag2"] = cdf["Coal_Price"].shift(2)
+        cdf["Coal_Lag3"] = cdf["Coal_Price"].shift(3)
+        cdf["Coal_Lag14"] = cdf["Coal_Price"].shift(14)
+
+        cdf["EU_ETS_Lag2"] = cdf["EU_ETS_Price"].shift(2)
+        cdf["EU_ETS_Lag3"] = cdf["EU_ETS_Price"].shift(3)
+        cdf["EU_ETS_Lag14"] = cdf["EU_ETS_Price"].shift(14)
+
+        cdf["Brent_Oil_Lag2"] = cdf["Brent_Oil_Price"].shift(2)
+        cdf["Brent_Oil_Lag3"] = cdf["Brent_Oil_Price"].shift(3)
+        cdf["Brent_Oil_Lag14"] = cdf["Brent_Oil_Price"].shift(14)
+
+        cdf["EU_Gas_Storage_Lag2"] = cdf["EU_Gas_Storage_Anomaly"].shift(2)
+        cdf["EU_Gas_Storage_Lag3"] = cdf["EU_Gas_Storage_Anomaly"].shift(3)
+        cdf["EU_Gas_Storage_Lag14"] = cdf["EU_Gas_Storage_Anomaly"].shift(14)
+
+        # Load lags (Giữ 2, 3, 7, 14)
         cdf["Load_Lag2"]  = load.shift(2)
+        cdf["Load_Lag3"]  = load.shift(3)
         cdf["Load_Lag7"]  = load.shift(7)
         cdf["Load_Lag14"] = load.shift(14)
 
-        # Rolling stats (shift first to avoid leakage)
-        price_s1 = price.shift(1)
-        cdf["Price_Roll7_Mean"] = price_s1.rolling(7, min_periods=4).mean()
-        cdf["Price_Roll7_Std"]  = price_s1.rolling(7, min_periods=4).std()
+        # Rolling
+        cdf["Price_Roll7_Mean"] = cdf["Price_Lag1"].rolling(7).mean()
+        cdf["Price_Roll7_Std"]  = cdf["Price_Lag1"].rolling(7).std()
+        cdf["Load_Roll7_Mean"]  = cdf["Load_Lag2"].rolling(7, min_periods=4).mean()
 
         all_parts.append(cdf)
 
     df_out = pd.concat(all_parts, ignore_index=True)
-    print("   Lags OK: Lag1/2/7/14/30/365, LoadLag1/7/14, Roll7Mean/Std")
+    print("   Lags OK: Price(1..365), Load(2/7/14), Macro(Lag2), Roll7Mean/Std")
     return df_out
 
 

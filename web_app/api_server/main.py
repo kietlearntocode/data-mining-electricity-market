@@ -14,7 +14,7 @@ import xgboost as xgb
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import timedelta
-from live_api import get_live_features
+from live_api import get_live_features, fetch_live_actual_prices
 
 app = FastAPI(title="EU Electricity Daily Forecast API", version="2.0")
 
@@ -34,17 +34,20 @@ SCALER_PATH = os.path.join(BASE, "../ai_model/country_scalers.json")
 PROFILE_PATH = os.path.join(BASE, "../data_pipeline/country_profiles.json")
 
 FEATURE_COLS = [
-    # C1 macro (5)
-    "TTF_Gas_Price", "Coal_Price", "EU_ETS_Price", "Brent_Oil_Price",
-    "EU_Gas_Storage_Anomaly",
+    # C1 macro (15 biến: 3 mốc thời gian cho 5 loại)
+    "TTF_Gas_Lag2", "TTF_Gas_Lag3", "TTF_Gas_Lag14",
+    "Coal_Lag2", "Coal_Lag3", "Coal_Lag14",
+    "EU_ETS_Lag2", "EU_ETS_Lag3", "EU_ETS_Lag14",
+    "Brent_Oil_Lag2", "Brent_Oil_Lag3", "Brent_Oil_Lag14",
+    "EU_Gas_Storage_Lag2", "EU_Gas_Storage_Lag3", "EU_Gas_Storage_Lag14",
     # Cyclical (4)
     "DayOfWeek_Sin", "DayOfWeek_Cos", "Month_Sin", "Month_Cos",
     # Lag price (6)
     "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
     # Lag load (4)
-    "Load_Lag1", "Load_Lag2", "Load_Lag7", "Load_Lag14",
-    # Rolling stats (2)
-    "Price_Roll7_Mean", "Price_Roll7_Std",
+    "Load_Lag2", "Load_Lag3", "Load_Lag7", "Load_Lag14",
+    # Rolling stats (3)
+    "Price_Roll7_Mean", "Price_Roll7_Std", "Load_Roll7_Mean",
     # Country Profiles (3)
     "Country_Avg_Load", "Country_Avg_Residual_Load", "Country_Avg_Price"
 ]
@@ -127,23 +130,28 @@ def _build_feature_vector(country: str, target_date: pd.Timestamp,
         
     prev_date = target_date - timedelta(days=1)
 
-    # ── Macro C1: lấy từ historical hoặc live API ─────────────────────────
-    prev_row = _get_row(country, prev_date)
+    # ── Macro C1: Lấy từ T-2, T-3, T-14 ──────────────────────────────────
+    macro_row_t2 = _get_row(country, target_date - timedelta(days=2)) or {}
+    macro_row_t3 = _get_row(country, target_date - timedelta(days=3)) or {}
+    macro_row_t14 = _get_row(country, target_date - timedelta(days=14)) or {}
 
-    if prev_row is not None:
-        macro = {
-            "TTF_Gas_Price":          float(prev_row.get("TTF_Gas_Price", 40.0)),
-            "Coal_Price":             float(prev_row.get("Coal_Price", 100.0)),
-            "EU_ETS_Price":           float(prev_row.get("EU_ETS_Price", 70.0)),
-            "Brent_Oil_Price":        float(prev_row.get("Brent_Oil_Price", 80.0)),
-            "EU_Gas_Storage_Anomaly": float(prev_row.get("EU_Gas_Storage_Anomaly", 0.0)),
-        }
-    else:
-        macro = {
-            "TTF_Gas_Price": 40.0, "Coal_Price": 100.0,
-            "EU_ETS_Price": 70.0, "Brent_Oil_Price": 80.0,
-            "EU_Gas_Storage_Anomaly": 0.0,
-        }
+    macro = {
+        "TTF_Gas_Lag2":          float(macro_row_t2.get("TTF_Gas_Price", 40.0)),
+        "TTF_Gas_Lag3":          float(macro_row_t3.get("TTF_Gas_Price", 40.0)),
+        "TTF_Gas_Lag14":         float(macro_row_t14.get("TTF_Gas_Price", 40.0)),
+        "Coal_Lag2":             float(macro_row_t2.get("Coal_Price", 100.0)),
+        "Coal_Lag3":             float(macro_row_t3.get("Coal_Price", 100.0)),
+        "Coal_Lag14":            float(macro_row_t14.get("Coal_Price", 100.0)),
+        "EU_ETS_Lag2":           float(macro_row_t2.get("EU_ETS_Price", 70.0)),
+        "EU_ETS_Lag3":           float(macro_row_t3.get("EU_ETS_Price", 70.0)),
+        "EU_ETS_Lag14":          float(macro_row_t14.get("EU_ETS_Price", 70.0)),
+        "Brent_Oil_Lag2":        float(macro_row_t2.get("Brent_Oil_Price", 80.0)),
+        "Brent_Oil_Lag3":        float(macro_row_t3.get("Brent_Oil_Price", 80.0)),
+        "Brent_Oil_Lag14":       float(macro_row_t14.get("Brent_Oil_Price", 80.0)),
+        "EU_Gas_Storage_Lag2":   float(macro_row_t2.get("EU_Gas_Storage_Anomaly", 0.0)),
+        "EU_Gas_Storage_Lag3":   float(macro_row_t3.get("EU_Gas_Storage_Anomaly", 0.0)),
+        "EU_Gas_Storage_Lag14":  float(macro_row_t14.get("EU_Gas_Storage_Anomaly", 0.0)),
+    }
 
     # ── Cyclical: tính từ target_date ────────────────────────────────────
     cyc = _cyclical(target_date)
@@ -171,22 +179,25 @@ def _build_feature_vector(country: str, target_date: pd.Timestamp,
     price_lag30 = _price(target_date - timedelta(days=30))
     price_lag365= _price(target_date - timedelta(days=365))
 
-    load_lag1  = _load(target_date - timedelta(days=1))
     load_lag2  = _load(target_date - timedelta(days=2))
+    load_lag3  = _load(target_date - timedelta(days=3))
     load_lag7  = _load(target_date - timedelta(days=7))
     load_lag14 = _load(target_date - timedelta(days=14))
 
-    # Rolling 7-day mean/std (from T-7 to T-1)
-    roll_prices = [_price(target_date - timedelta(days=i)) for i in range(1, 8)]
-    roll7_mean = float(np.mean(roll_prices))
-    roll7_std  = float(np.std(roll_prices))
+    roll_prices = [_price(target_date - timedelta(days=d)) for d in range(1, 8)]
+    roll7_mean = float(np.mean(roll_prices)) if len(roll_prices) > 0 else 0.0
+    roll7_std  = float(np.std(roll_prices)) if len(roll_prices) > 0 else 0.0
+
+    roll_loads = [_load(target_date - timedelta(days=d)) for d in range(2, 9)]
+    load_roll7_mean = float(np.mean(roll_loads)) if len(roll_loads) > 0 else 0.0
 
     lags = {
         "Price_Lag1": price_lag1, "Price_Lag2": price_lag2,
         "Price_Lag7": price_lag7, "Price_Lag14": price_lag14,
         "Price_Lag30": price_lag30, "Price_Lag365": price_lag365,
-        "Load_Lag1": load_lag1, "Load_Lag2": load_lag2, "Load_Lag7": load_lag7, "Load_Lag14": load_lag14,
+        "Load_Lag2": load_lag2, "Load_Lag3": load_lag3, "Load_Lag7": load_lag7, "Load_Lag14": load_lag14,
         "Price_Roll7_Mean": roll7_mean, "Price_Roll7_Std": roll7_std,
+        "Load_Roll7_Mean": load_roll7_mean,
     }
 
     # ── Country Profiles ──────────────────────────────────────────────────
@@ -262,6 +273,11 @@ def get_forecast(
             detail=f"Date too far in future. Max allowed: {max_allowed.strftime('%Y-%m-%d')}"
         )
 
+    # ── Kéo Live Actual Prices nếu Tương Lai ───────────────────────────────
+    live_actuals = {}
+    if start_date > max_hist:
+        live_actuals = fetch_live_actual_prices(country, start_date.strftime("%Y-%m-%d"), days=7)
+
     # ── Rolling 7-day forecast ─────────────────────────────────────────────
     results = []
     historical_prices = {}
@@ -276,9 +292,14 @@ def get_forecast(
         X = pd.DataFrame([feat_vec])[FEATURE_COLS]
         predicted = float(model.predict(X)[0])
 
-        # Lấy actual nếu có trong lịch sử
+        # Lấy actual nếu có trong lịch sử CSV
         actual_row = _get_row(country, forecast_date)
         actual = float(actual_row["Real_Wholesale_Price_EUR"]) if actual_row is not None and not pd.isna(actual_row.get("Real_Wholesale_Price_EUR")) else None
+
+        # Nếu không có trong CSV, cố lấy từ Live ENTSO-E
+        if actual is None and start_date > max_hist:
+            date_str = forecast_date.strftime("%Y-%m-%d")
+            actual = live_actuals.get(date_str)
 
         results.append({
             "date":      forecast_date.strftime("%Y-%m-%d"),
@@ -305,12 +326,12 @@ def get_forecast(
         "data_last_date": max_hist.strftime("%Y-%m-%d"),
         "forecast":       results,
         "macro_snapshot": {
-            "TTF_Gas_Price":           inputs_snapshot.get("TTF_Gas_Price"),
-            "Coal_Price":              inputs_snapshot.get("Coal_Price"),
-            "EU_ETS_Price":            inputs_snapshot.get("EU_ETS_Price"),
-            "Brent_Oil_Price":         inputs_snapshot.get("Brent_Oil_Price"),
-            "Residual_Load_Normalized":inputs_snapshot.get("Residual_Load_Normalized"),
-            "EU_Gas_Storage_Anomaly":  inputs_snapshot.get("EU_Gas_Storage_Anomaly"),
+            "TTF_Gas_Lag2":            inputs_snapshot.get("TTF_Gas_Lag2"),
+            "Coal_Lag2":               inputs_snapshot.get("Coal_Lag2"),
+            "EU_ETS_Lag2":             inputs_snapshot.get("EU_ETS_Lag2"),
+            "Brent_Oil_Lag2":          inputs_snapshot.get("Brent_Oil_Lag2"),
+            "Country_Avg_Residual_Load":inputs_snapshot.get("Country_Avg_Residual_Load"),
+            "EU_Gas_Storage_Lag2":     inputs_snapshot.get("EU_Gas_Storage_Lag2"),
         }
     }
 

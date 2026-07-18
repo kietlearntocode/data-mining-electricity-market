@@ -277,12 +277,12 @@ const macroItems = computed(() => {
   if (!forecast.value?.macro_snapshot) return []
   const s = forecast.value.macro_snapshot
   return [
-    { label: 'TTF Gas',      value: s.TTF_Gas_Price,            unit: '€/MWh', color: 'bar-amber',   pct: clamp((s.TTF_Gas_Price  / 120) * 100, 5, 95) },
-    { label: 'Coal API2',    value: s.Coal_Price,               unit: '$/t',   color: 'bar-gray',    pct: clamp((s.Coal_Price     / 250) * 100, 5, 95) },
-    { label: 'EU ETS',       value: s.EU_ETS_Price,             unit: '€/t',   color: 'bar-green',   pct: clamp((s.EU_ETS_Price   / 150) * 100, 5, 95) },
-    { label: 'Brent Crude',  value: s.Brent_Oil_Price,          unit: '$/bbl', color: 'bar-orange',  pct: clamp((s.Brent_Oil_Price / 120) * 100, 5, 95) },
-    { label: 'Residual Load',value: s.Residual_Load_Normalized, unit: '(norm)',color: 'bar-blue',    pct: clamp(s.Residual_Load_Normalized * 100, 5, 95) },
-    { label: 'Gas Storage Δ',value: s.EU_Gas_Storage_Anomaly,   unit: '(anom)',color: 'bar-teal',    pct: clamp((s.EU_Gas_Storage_Anomaly + 0.5) * 100, 5, 95) },
+    { label: 'TTF Gas (T-2)',  value: s.TTF_Gas_Lag2,          unit: '€/MWh', color: 'bar-amber',   pct: clamp((s.TTF_Gas_Lag2   / 120) * 100, 5, 95) },
+    { label: 'Coal API2 (T-2)',value: s.Coal_Lag2,             unit: '$/t',   color: 'bar-gray',    pct: clamp((s.Coal_Lag2      / 250) * 100, 5, 95) },
+    { label: 'EU ETS (T-2)',   value: s.EU_ETS_Lag2,           unit: '€/t',   color: 'bar-green',   pct: clamp((s.EU_ETS_Lag2    / 150) * 100, 5, 95) },
+    { label: 'Brent (T-2)',    value: s.Brent_Oil_Lag2,        unit: '$/bbl', color: 'bar-orange',  pct: clamp((s.Brent_Oil_Lag2 / 120) * 100, 5, 95) },
+    { label: 'Avg Res Load',   value: s.Country_Avg_Residual_Load, unit: 'MW',color: 'bar-blue',    pct: clamp((s.Country_Avg_Residual_Load / 40000) * 100, 5, 95) },
+    { label: 'Gas Stor (T-2)', value: s.EU_Gas_Storage_Lag2,   unit: '%',     color: 'bar-teal',    pct: clamp((s.EU_Gas_Storage_Lag2 * 100 + 50), 5, 95) },
   ]
 })
 
@@ -381,9 +381,9 @@ function formatShortDate(dateStr) {
 }
 
 function formatMacro(value, unit) {
-  if (value === null || value === undefined) return '—'
-  if (unit === '(norm)') return (value * 100).toFixed(0) + '%'
-  if (unit === '(anom)') return (value >= 0 ? '+' : '') + (value * 100).toFixed(1) + 'pp'
+  if (value === null || value === undefined || isNaN(value)) return '—'
+  if (unit === 'MW') return Math.round(value).toLocaleString() + ' ' + unit
+  if (unit === '%') return (value * 100).toFixed(1) + '%'
   return value.toFixed(1) + ' ' + unit
 }
 
