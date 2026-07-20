@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: ember-electricity-api
+    env: python
+    buildCommand: "pip install -r web_app/api_server/requirements.txt"
+    startCommand: "uvicorn web_app.api_server.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12

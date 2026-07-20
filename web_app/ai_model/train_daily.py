@@ -5,8 +5,8 @@ Input : daily_features_data.csv
 Output: daily_xgb.json + training_report.json
 
 Split: Walk-Forward
-  Train: 2019-01-01 → 2024-12-31 (toàn bộ 6 nước gộp lại)
-  Test : 2025-01-01 → 2025-12-31
+  Train: 2018-01-31 → 2025-12-31 (toàn bộ 17 nước gộp lại)
+  Test : 2026-01-01 → 2026-12-31
 """
 
 import os, json
@@ -26,18 +26,18 @@ COUNTRIES = [
 ]
 
 FEATURE_COLS = [
-    # C1 macro (15 biến: 3 mốc thời gian cho 5 loại)
-    "TTF_Gas_Lag2", "TTF_Gas_Lag3", "TTF_Gas_Lag14",
-    "Coal_Lag2", "Coal_Lag3", "Coal_Lag14",
-    "EU_ETS_Lag2", "EU_ETS_Lag3", "EU_ETS_Lag14",
-    "Brent_Oil_Lag2", "Brent_Oil_Lag3", "Brent_Oil_Lag14",
-    "EU_Gas_Storage_Lag2", "EU_Gas_Storage_Lag3", "EU_Gas_Storage_Lag14",
+    # Macro (10 biến: Lag 1, Lag 2)
+    "TTF_Gas_Lag1", "TTF_Gas_Lag2",
+    "Coal_Lag1", "Coal_Lag2",
+    "EU_ETS_Lag1", "EU_ETS_Lag2",
+    "Brent_Oil_Lag1", "Brent_Oil_Lag2",
+    "EU_Gas_Storage_Lag1", "EU_Gas_Storage_Lag2",
     # Cyclical (4)
     "DayOfWeek_Sin", "DayOfWeek_Cos", "Month_Sin", "Month_Cos",
-    # Lag price (6)
-    "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
-    # Lag load (4)
-    "Load_Lag2", "Load_Lag3", "Load_Lag7", "Load_Lag14",
+    # Lag price (5)
+    "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30",
+    # Lag load (3)
+    "Load_Lag1", "Load_Lag2", "Load_Lag7",
     # Rolling stats (3)
     "Price_Roll7_Mean", "Price_Roll7_Std", "Load_Roll7_Mean",
     # Country Profiles (3)
@@ -68,8 +68,16 @@ def load_data():
 
 def prepare_splits(df):
     print(f"\n[2] Walk-Forward Split:")
-    print(f"   Train: 2019-01-01 → {TRAIN_END}")
-    print(f"   Test : {TEST_START} → 2025-12-31")
+    
+    train_mask = df["Date"] <= TRAIN_END
+    test_mask  = df["Date"] >= TEST_START
+
+    df_train = df[train_mask].copy()
+    df_test  = df[test_mask].copy()
+
+    train_start = df_train["Date"].min().strftime('%Y-%m-%d')
+    print(f"   Train: {train_start} → {TRAIN_END}")
+    print(f"   Test : {TEST_START} → {TEST_END}")
 
     train_mask = df["Date"] <= TRAIN_END
     test_mask  = df["Date"] >= TEST_START
@@ -142,7 +150,7 @@ def evaluate(model, X_train, y_train, X_test, y_test, df_train, df_test):
 
     # Per-country test performance
     country_metrics = {}
-    print("\n   Per-country (Test 2025):")
+    print("\n   Per-country (Test 2026):")
     for country in COUNTRIES:
         mask = df_test["Country"] == country
         if mask.sum() == 0:
@@ -190,8 +198,10 @@ def main():
     # Lưu report
     report["model_path"] = MODEL_PATH
     report["features"] = FEATURE_COLS
-    report["train_period"] = f"2019-01-01 → {TRAIN_END}"
-    report["test_period"]  = f"{TEST_START} → 2025-12-31"
+    
+    train_start = df_train["Date"].min().strftime('%Y-%m-%d')
+    report["train_period"] = f"{train_start} → {TRAIN_END}"
+    report["test_period"]  = f"{TEST_START} → {TEST_END}"
     with open(REPORT_PATH, "w") as f:
         json.dump(report, f, indent=2)
     print(f"   Report đã lưu: {REPORT_PATH}")

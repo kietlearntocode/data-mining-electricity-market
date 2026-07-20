@@ -142,7 +142,7 @@
 
         <!-- ── MACRO INDICATORS ──────────────────────────────────────── -->
         <div class="macro-section">
-          <div class="macro-title">Market Inputs (T-1)</div>
+          <div class="macro-title">Market Context (T-1)</div>
           <div class="macro-grid">
             <div class="macro-card" v-for="(item, key) in macroItems" :key="key">
               <div class="macro-icon">
@@ -192,8 +192,8 @@ use([LineChart, GridComponent, TooltipComponent, LegendComponent,
      MarkLineComponent, DataZoomComponent, CanvasRenderer])
 
 // ── Config ────────────────────────────────────────────────────────────────
-// API endpoint Backend (Deploy trên Render)
-const API_BASE = 'https://zero-shot-energy.onrender.com'
+// Trỏ về localhost khi test
+const API_BASE = 'http://localhost:8000'
 
 const countryNames = {
   BE: 'Belgium', CZ: 'Czechia', DE: 'Germany', DK: 'Denmark', ES: 'Spain',
@@ -215,7 +215,12 @@ const forecast       = ref(null)
 onMounted(async () => {
   await fetchCountries()
   await fetchDateRange()
-  selectedDate.value = forecast.value?.data_last_date || dateRange.value.max_date
+  
+  if (!selectedDate.value) {
+    const today = new Date().toISOString().split('T')[0]
+    selectedDate.value = today > dateRange.value.max_forecast_date ? dateRange.value.max_forecast_date : today
+  }
+  
   await fetchForecast()
 })
 
@@ -233,9 +238,9 @@ async function fetchDateRange() {
       params: { country: selectedCountry.value }
     })
     dateRange.value = data
-    // Set default date = last available
     if (!selectedDate.value) {
-      selectedDate.value = data.max_date
+      const today = new Date().toISOString().split('T')[0]
+      selectedDate.value = today > data.max_forecast_date ? data.max_forecast_date : (today < data.min_date ? data.min_date : today)
     }
   } catch (e) {
     console.warn('date_range error:', e)
@@ -265,7 +270,8 @@ async function onParamsChange() {
 
 async function goToToday() {
   await fetchDateRange()
-  selectedDate.value = dateRange.value.max_date
+  const today = new Date().toISOString().split('T')[0]
+  selectedDate.value = today > dateRange.value.max_forecast_date ? dateRange.value.max_forecast_date : (today < dateRange.value.min_date ? dateRange.value.min_date : today)
   await fetchForecast()
 }
 
@@ -278,12 +284,12 @@ const macroItems = computed(() => {
   if (!forecast.value?.macro_snapshot) return []
   const s = forecast.value.macro_snapshot
   return [
-    { label: 'TTF Gas (T-2)',  value: s.TTF_Gas_Lag2,          unit: '€/MWh', color: 'bar-amber',   pct: clamp((s.TTF_Gas_Lag2   / 120) * 100, 5, 95) },
-    { label: 'Coal API2 (T-2)',value: s.Coal_Lag2,             unit: '$/t',   color: 'bar-gray',    pct: clamp((s.Coal_Lag2      / 250) * 100, 5, 95) },
-    { label: 'EU ETS (T-2)',   value: s.EU_ETS_Lag2,           unit: '€/t',   color: 'bar-green',   pct: clamp((s.EU_ETS_Lag2    / 150) * 100, 5, 95) },
-    { label: 'Brent (T-2)',    value: s.Brent_Oil_Lag2,        unit: '$/bbl', color: 'bar-orange',  pct: clamp((s.Brent_Oil_Lag2 / 120) * 100, 5, 95) },
+    { label: 'TTF Gas',  value: s.TTF_Gas_Lag1,          unit: '€/MWh', color: 'bar-amber',   pct: clamp((s.TTF_Gas_Lag1   / 120) * 100, 5, 95) },
+    { label: 'Coal API2',value: s.Coal_Lag1,             unit: '$/t',   color: 'bar-gray',    pct: clamp((s.Coal_Lag1      / 250) * 100, 5, 95) },
+    { label: 'EU ETS',   value: s.EU_ETS_Lag1,           unit: '€/t',   color: 'bar-green',   pct: clamp((s.EU_ETS_Lag1    / 150) * 100, 5, 95) },
+    { label: 'Brent',    value: s.Brent_Oil_Lag1,        unit: '$/bbl', color: 'bar-orange',  pct: clamp((s.Brent_Oil_Lag1 / 120) * 100, 5, 95) },
     { label: 'Avg Res Load',   value: s.Country_Avg_Residual_Load, unit: 'MW',color: 'bar-blue',    pct: clamp((s.Country_Avg_Residual_Load / 40000) * 100, 5, 95) },
-    { label: 'Gas Stor (T-2)', value: s.EU_Gas_Storage_Lag2,   unit: '%',     color: 'bar-teal',    pct: clamp((s.EU_Gas_Storage_Lag2 * 100 + 50), 5, 95) },
+    { label: 'Gas Stor', value: s.EU_Gas_Storage_Lag1,   unit: '%',     color: 'bar-teal',    pct: clamp((s.EU_Gas_Storage_Lag1 * 100 + 50), 5, 95) },
   ]
 })
 

@@ -34,18 +34,18 @@ SCALER_PATH = os.path.join(BASE, "../ai_model/country_scalers.json")
 PROFILE_PATH = os.path.join(BASE, "../data_pipeline/country_profiles.json")
 
 FEATURE_COLS = [
-    # C1 macro (15 biến: 3 mốc thời gian cho 5 loại)
-    "TTF_Gas_Lag2", "TTF_Gas_Lag3", "TTF_Gas_Lag14",
-    "Coal_Lag2", "Coal_Lag3", "Coal_Lag14",
-    "EU_ETS_Lag2", "EU_ETS_Lag3", "EU_ETS_Lag14",
-    "Brent_Oil_Lag2", "Brent_Oil_Lag3", "Brent_Oil_Lag14",
-    "EU_Gas_Storage_Lag2", "EU_Gas_Storage_Lag3", "EU_Gas_Storage_Lag14",
+    # Macro (10 biến: Lag 1, Lag 2)
+    "TTF_Gas_Lag1", "TTF_Gas_Lag2",
+    "Coal_Lag1", "Coal_Lag2",
+    "EU_ETS_Lag1", "EU_ETS_Lag2",
+    "Brent_Oil_Lag1", "Brent_Oil_Lag2",
+    "EU_Gas_Storage_Lag1", "EU_Gas_Storage_Lag2",
     # Cyclical (4)
     "DayOfWeek_Sin", "DayOfWeek_Cos", "Month_Sin", "Month_Cos",
-    # Lag price (6)
-    "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
-    # Lag load (4)
-    "Load_Lag2", "Load_Lag3", "Load_Lag7", "Load_Lag14",
+    # Lag price (5)
+    "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30",
+    # Lag load (3)
+    "Load_Lag1", "Load_Lag2", "Load_Lag7",
     # Rolling stats (3)
     "Price_Roll7_Mean", "Price_Roll7_Std", "Load_Roll7_Mean",
     # Country Profiles (3)
@@ -110,13 +110,13 @@ def _cyclical(date: pd.Timestamp) -> dict:
     }
 
 
-def _get_row(country: str, date: pd.Timestamp) -> pd.Series | None:
-    """Lấy 1 row từ daily_features_data cho (country, date)."""
+def _get_row(country: str, date: pd.Timestamp) -> dict:
+    """Lấy 1 row từ daily_features_data cho (country, date) dạng dictionary."""
     if df_feat is None:
-        return None
+        return {}
     mask = (df_feat["Country"] == country) & (df_feat["Date"] == date)
     rows = df_feat[mask]
-    return rows.iloc[0] if len(rows) > 0 else None
+    return rows.iloc[0].to_dict() if len(rows) > 0 else {}
 
 
 def _build_feature_vector(country: str, target_date: pd.Timestamp,
@@ -130,27 +130,21 @@ def _build_feature_vector(country: str, target_date: pd.Timestamp,
         
     prev_date = target_date - timedelta(days=1)
 
-    # ── Macro C1: Lấy từ T-2, T-3, T-14 ──────────────────────────────────
-    macro_row_t2 = _get_row(country, target_date - timedelta(days=2)) or {}
-    macro_row_t3 = _get_row(country, target_date - timedelta(days=3)) or {}
-    macro_row_t14 = _get_row(country, target_date - timedelta(days=14)) or {}
+    # ── Macro C1: Lấy từ T-1, T-2 ──────────────────────────────────────────
+    macro_row_t1 = _get_row(country, target_date - timedelta(days=1))
+    macro_row_t2 = _get_row(country, target_date - timedelta(days=2))
 
     macro = {
+        "TTF_Gas_Lag1":          float(macro_row_t1.get("TTF_Gas_Price", 40.0)),
         "TTF_Gas_Lag2":          float(macro_row_t2.get("TTF_Gas_Price", 40.0)),
-        "TTF_Gas_Lag3":          float(macro_row_t3.get("TTF_Gas_Price", 40.0)),
-        "TTF_Gas_Lag14":         float(macro_row_t14.get("TTF_Gas_Price", 40.0)),
+        "Coal_Lag1":             float(macro_row_t1.get("Coal_Price", 100.0)),
         "Coal_Lag2":             float(macro_row_t2.get("Coal_Price", 100.0)),
-        "Coal_Lag3":             float(macro_row_t3.get("Coal_Price", 100.0)),
-        "Coal_Lag14":            float(macro_row_t14.get("Coal_Price", 100.0)),
+        "EU_ETS_Lag1":           float(macro_row_t1.get("EU_ETS_Price", 70.0)),
         "EU_ETS_Lag2":           float(macro_row_t2.get("EU_ETS_Price", 70.0)),
-        "EU_ETS_Lag3":           float(macro_row_t3.get("EU_ETS_Price", 70.0)),
-        "EU_ETS_Lag14":          float(macro_row_t14.get("EU_ETS_Price", 70.0)),
+        "Brent_Oil_Lag1":        float(macro_row_t1.get("Brent_Oil_Price", 80.0)),
         "Brent_Oil_Lag2":        float(macro_row_t2.get("Brent_Oil_Price", 80.0)),
-        "Brent_Oil_Lag3":        float(macro_row_t3.get("Brent_Oil_Price", 80.0)),
-        "Brent_Oil_Lag14":       float(macro_row_t14.get("Brent_Oil_Price", 80.0)),
+        "EU_Gas_Storage_Lag1":   float(macro_row_t1.get("EU_Gas_Storage_Anomaly", 0.0)),
         "EU_Gas_Storage_Lag2":   float(macro_row_t2.get("EU_Gas_Storage_Anomaly", 0.0)),
-        "EU_Gas_Storage_Lag3":   float(macro_row_t3.get("EU_Gas_Storage_Anomaly", 0.0)),
-        "EU_Gas_Storage_Lag14":  float(macro_row_t14.get("EU_Gas_Storage_Anomaly", 0.0)),
     }
 
     # ── Cyclical: tính từ target_date ────────────────────────────────────
@@ -161,13 +155,13 @@ def _build_feature_vector(country: str, target_date: pd.Timestamp,
         if date in historical_prices:
             return float(historical_prices[date])
         r = _get_row(country, date)
-        if r is not None and not pd.isna(r.get("Real_Wholesale_Price_EUR")):
+        if r and not pd.isna(r.get("Real_Wholesale_Price_EUR")):
             return float(r["Real_Wholesale_Price_EUR"])
         return 60.0
 
     def _load(date):
         r = _get_row(country, date)
-        if r is not None and not pd.isna(r.get("Residual_Load_Normalized")):
+        if r and not pd.isna(r.get("Residual_Load_Normalized")):
             return float(r["Residual_Load_Normalized"])
         return 0.5
 
@@ -177,25 +171,23 @@ def _build_feature_vector(country: str, target_date: pd.Timestamp,
     price_lag7  = _price(target_date - timedelta(days=7))
     price_lag14 = _price(target_date - timedelta(days=14))
     price_lag30 = _price(target_date - timedelta(days=30))
-    price_lag365= _price(target_date - timedelta(days=365))
 
+    load_lag1  = _load(target_date - timedelta(days=1))
     load_lag2  = _load(target_date - timedelta(days=2))
-    load_lag3  = _load(target_date - timedelta(days=3))
     load_lag7  = _load(target_date - timedelta(days=7))
-    load_lag14 = _load(target_date - timedelta(days=14))
 
     roll_prices = [_price(target_date - timedelta(days=d)) for d in range(1, 8)]
     roll7_mean = float(np.mean(roll_prices)) if len(roll_prices) > 0 else 0.0
     roll7_std  = float(np.std(roll_prices)) if len(roll_prices) > 0 else 0.0
 
-    roll_loads = [_load(target_date - timedelta(days=d)) for d in range(2, 9)]
+    roll_loads = [_load(target_date - timedelta(days=d)) for d in range(1, 8)]
     load_roll7_mean = float(np.mean(roll_loads)) if len(roll_loads) > 0 else 0.0
 
     lags = {
         "Price_Lag1": price_lag1, "Price_Lag2": price_lag2,
         "Price_Lag7": price_lag7, "Price_Lag14": price_lag14,
-        "Price_Lag30": price_lag30, "Price_Lag365": price_lag365,
-        "Load_Lag2": load_lag2, "Load_Lag3": load_lag3, "Load_Lag7": load_lag7, "Load_Lag14": load_lag14,
+        "Price_Lag30": price_lag30,
+        "Load_Lag1": load_lag1, "Load_Lag2": load_lag2, "Load_Lag7": load_lag7,
         "Price_Roll7_Mean": roll7_mean, "Price_Roll7_Std": roll7_std,
         "Load_Roll7_Mean": load_roll7_mean,
     }
@@ -292,9 +284,9 @@ def get_forecast(
         X = pd.DataFrame([feat_vec])[FEATURE_COLS]
         predicted = float(model.predict(X)[0])
 
-        # Lấy actual nếu có trong lịch sử CSV
+        # Lấy actual chỉ để hiển thị lên biểu đồ (đánh giá)
         actual_row = _get_row(country, forecast_date)
-        actual = float(actual_row["Real_Wholesale_Price_EUR"]) if actual_row is not None and not pd.isna(actual_row.get("Real_Wholesale_Price_EUR")) else None
+        actual = float(actual_row["Real_Wholesale_Price_EUR"]) if actual_row and not pd.isna(actual_row.get("Real_Wholesale_Price_EUR")) else None
 
         # Nếu không có trong CSV, cố lấy từ Live ENTSO-E
         if actual is None and start_date > max_hist:
@@ -309,8 +301,9 @@ def get_forecast(
             "inputs":    {k: round(float(v), 4) for k, v in feat_vec.items()},
         })
 
-        # Lưu vào historical_prices để dùng làm lag cho những ngày tiếp theo trong vòng lặp 7 ngày.
-        # Ưu tiên dùng actual (ground truth), nếu tương lai không có actual thì dùng predicted
+        # CHUNG MỘT CÔNG THỨC DUY NHẤT CHO MỌI NGÀY (Quá khứ hay Tương lai):
+        # - Nếu ngày đó ĐÃ CÓ Giá Thực Tế (Actual) -> Gán Actual làm mồi.
+        # - Nếu ngày đó CHƯA CÓ Giá Thực Tế (VD: T+2, T+3 tương lai) -> Gán Predicted làm mồi (Lag Forecast).
         historical_prices[forecast_date] = actual if actual is not None else predicted
 
     if not results:
@@ -326,12 +319,12 @@ def get_forecast(
         "data_last_date": max_hist.strftime("%Y-%m-%d"),
         "forecast":       results,
         "macro_snapshot": {
-            "TTF_Gas_Lag2":            inputs_snapshot.get("TTF_Gas_Lag2"),
-            "Coal_Lag2":               inputs_snapshot.get("Coal_Lag2"),
-            "EU_ETS_Lag2":             inputs_snapshot.get("EU_ETS_Lag2"),
-            "Brent_Oil_Lag2":          inputs_snapshot.get("Brent_Oil_Lag2"),
+            "TTF_Gas_Lag1":            inputs_snapshot.get("TTF_Gas_Lag1"),
+            "Coal_Lag1":               inputs_snapshot.get("Coal_Lag1"),
+            "EU_ETS_Lag1":             inputs_snapshot.get("EU_ETS_Lag1"),
+            "Brent_Oil_Lag1":          inputs_snapshot.get("Brent_Oil_Lag1"),
             "Country_Avg_Residual_Load":inputs_snapshot.get("Country_Avg_Residual_Load"),
-            "EU_Gas_Storage_Lag2":     inputs_snapshot.get("EU_Gas_Storage_Lag2"),
+            "EU_Gas_Storage_Lag1":     inputs_snapshot.get("EU_Gas_Storage_Lag1"),
         }
     }
 

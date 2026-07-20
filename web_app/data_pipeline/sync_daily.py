@@ -79,7 +79,7 @@ def get_last_datetime() -> pd.Timestamp:
                 candidate = df["Datetime"].max()
                 if last is None or candidate > last:
                     last = candidate
-                print(f"  [{os.path.basename(path)}] → last: {candidate}")
+                print(f"  [{os.path.basename(path)}] -> last: {candidate}")
             except Exception as e:
                 print(f"  Warn: {path}: {e}")
     if last is None:
@@ -162,7 +162,7 @@ def fetch_entsoe_country(entsoe_code: str, start: pd.Timestamp, end: pd.Timestam
 # ═════════════════════════════════════════════════════════════════════════════
 def fetch_finance_daily(start_date: str, end_date: str) -> pd.DataFrame:
     """Download daily close prices từ Yahoo Finance."""
-    print(f"\n[yfinance] Fetch {start_date} → {end_date}")
+    print(f"\n[yfinance] Fetch {start_date} -> {end_date}")
     frames = {}
 
     session = requests.Session()
@@ -175,7 +175,10 @@ def fetch_finance_daily(start_date: str, end_date: str) -> pd.DataFrame:
             df = yf.download(ticker, start=start_date, end=end_date,
                              auto_adjust=True, progress=False, session=session)
             if not df.empty:
-                frames[col_name] = df["Close"].squeeze()
+                s = df["Close"]
+                if isinstance(s, pd.DataFrame):
+                    s = s.iloc[:, 0]
+                frames[col_name] = s.copy()
                 print(f"  {col_name}: {len(df)} days")
             else:
                 print(f"  {col_name}: No data (ticker {ticker} possibly delisted)")
@@ -228,7 +231,7 @@ def fetch_gie_daily(start_date: datetime, end_date: datetime) -> pd.Series:
         print("  [!] Missing GIE_API_KEY")
         return pd.Series(dtype=float)
 
-    print(f"\n[GIE AGSI] Fetch {start_date.date()} → {end_date.date()}")
+    print(f"\n[GIE AGSI] Fetch {start_date.date()} -> {end_date.date()}")
     headers = {"x-key": GIE_KEY}
     all_records = []
 
@@ -246,7 +249,7 @@ def fetch_gie_daily(start_date: datetime, end_date: datetime) -> pd.Series:
             data = resp.json()
             if "data" in data and data["data"]:
                 all_records.extend(data["data"])
-                print(f"  Chunk {current.date()} → {chunk_end.date()}: {len(data['data'])} days")
+                print(f"  Chunk {current.date()} -> {chunk_end.date()}: {len(data['data'])} days")
         except Exception as e:
             print(f"  GIE WARN: {e}")
         current = chunk_end + timedelta(days=1)
@@ -418,7 +421,7 @@ def sync():
         df_c = add_cyclical_features(df_c, "Datetime")
 
         all_country_dfs.append(df_c)
-        print(f"  → {country_iso}: {len(df_c)} hours processed")
+        print(f"  -> {country_iso}: {len(df_c)} hours processed")
 
     if not all_country_dfs:
         print("\n No data fetched.")
@@ -441,7 +444,7 @@ def sync():
 
     df_final.to_csv(RECENT_CSV, index=False)
     print(f"\n{'='*60}")
-    print(f" Sync complete! {len(df_new)} new rows → {RECENT_CSV}")
+    print(f" Sync complete! {len(df_new)} new rows -> {RECENT_CSV}")
     print(f" Total {len(df_final)} rows in recent_data.csv")
     print(f"{'='*60}")
 

@@ -47,18 +47,18 @@ DAILY_AGG = {
 
 
 FEATURE_COLS = [
-    # C1 macro (15 biến: 3 mốc thời gian cho 5 loại)
-    "TTF_Gas_Lag2", "TTF_Gas_Lag3", "TTF_Gas_Lag14",
-    "Coal_Lag2", "Coal_Lag3", "Coal_Lag14",
-    "EU_ETS_Lag2", "EU_ETS_Lag3", "EU_ETS_Lag14",
-    "Brent_Oil_Lag2", "Brent_Oil_Lag3", "Brent_Oil_Lag14",
-    "EU_Gas_Storage_Lag2", "EU_Gas_Storage_Lag3", "EU_Gas_Storage_Lag14",
+    # Macro (10 biến: Lag 1, Lag 2)
+    "TTF_Gas_Lag1", "TTF_Gas_Lag2",
+    "Coal_Lag1", "Coal_Lag2",
+    "EU_ETS_Lag1", "EU_ETS_Lag2",
+    "Brent_Oil_Lag1", "Brent_Oil_Lag2",
+    "EU_Gas_Storage_Lag1", "EU_Gas_Storage_Lag2",
     # Cyclical (4)
     "DayOfWeek_Sin", "DayOfWeek_Cos", "Month_Sin", "Month_Cos",
-    # Lag price (6)
-    "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30", "Price_Lag365",
-    # Lag load (4)
-    "Load_Lag2", "Load_Lag3", "Load_Lag7", "Load_Lag14",
+    # Lag price (5)
+    "Price_Lag1", "Price_Lag2", "Price_Lag7", "Price_Lag14", "Price_Lag30",
+    # Lag load (3)
+    "Load_Lag1", "Load_Lag2", "Load_Lag7",
     # Rolling stats (3)
     "Price_Roll7_Mean", "Price_Roll7_Std", "Load_Roll7_Mean",
     # Country Profiles (3)
@@ -161,39 +161,28 @@ def add_lags(df: pd.DataFrame) -> pd.DataFrame:
         cdf["Price_Lag7"]   = price.shift(7)
         cdf["Price_Lag14"]  = price.shift(14)
         cdf["Price_Lag30"]  = price.shift(30)
-        cdf["Price_Lag365"] = price.shift(365)
 
-        # Macro lags (Lag 2, Lag 3, Lag 14)
+        # Macro lags (Lag 1, Lag 2)
+        cdf["TTF_Gas_Lag1"] = cdf["TTF_Gas_Price"].shift(1)
         cdf["TTF_Gas_Lag2"] = cdf["TTF_Gas_Price"].shift(2)
-        cdf["TTF_Gas_Lag3"] = cdf["TTF_Gas_Price"].shift(3)
-        cdf["TTF_Gas_Lag14"] = cdf["TTF_Gas_Price"].shift(14)
-
-        cdf["Coal_Lag2"] = cdf["Coal_Price"].shift(2)
-        cdf["Coal_Lag3"] = cdf["Coal_Price"].shift(3)
-        cdf["Coal_Lag14"] = cdf["Coal_Price"].shift(14)
-
-        cdf["EU_ETS_Lag2"] = cdf["EU_ETS_Price"].shift(2)
-        cdf["EU_ETS_Lag3"] = cdf["EU_ETS_Price"].shift(3)
-        cdf["EU_ETS_Lag14"] = cdf["EU_ETS_Price"].shift(14)
-
+        cdf["Coal_Lag1"]    = cdf["Coal_Price"].shift(1)
+        cdf["Coal_Lag2"]    = cdf["Coal_Price"].shift(2)
+        cdf["EU_ETS_Lag1"]  = cdf["EU_ETS_Price"].shift(1)
+        cdf["EU_ETS_Lag2"]  = cdf["EU_ETS_Price"].shift(2)
+        cdf["Brent_Oil_Lag1"] = cdf["Brent_Oil_Price"].shift(1)
         cdf["Brent_Oil_Lag2"] = cdf["Brent_Oil_Price"].shift(2)
-        cdf["Brent_Oil_Lag3"] = cdf["Brent_Oil_Price"].shift(3)
-        cdf["Brent_Oil_Lag14"] = cdf["Brent_Oil_Price"].shift(14)
-
+        cdf["EU_Gas_Storage_Lag1"] = cdf["EU_Gas_Storage_Anomaly"].shift(1)
         cdf["EU_Gas_Storage_Lag2"] = cdf["EU_Gas_Storage_Anomaly"].shift(2)
-        cdf["EU_Gas_Storage_Lag3"] = cdf["EU_Gas_Storage_Anomaly"].shift(3)
-        cdf["EU_Gas_Storage_Lag14"] = cdf["EU_Gas_Storage_Anomaly"].shift(14)
 
-        # Load lags (Giữ 2, 3, 7, 14)
+        # Load lags (Lag 1, 2, 7)
+        cdf["Load_Lag1"]  = load.shift(1)
         cdf["Load_Lag2"]  = load.shift(2)
-        cdf["Load_Lag3"]  = load.shift(3)
         cdf["Load_Lag7"]  = load.shift(7)
-        cdf["Load_Lag14"] = load.shift(14)
 
         # Rolling
         cdf["Price_Roll7_Mean"] = cdf["Price_Lag1"].rolling(7).mean()
         cdf["Price_Roll7_Std"]  = cdf["Price_Lag1"].rolling(7).std()
-        cdf["Load_Roll7_Mean"]  = cdf["Load_Lag2"].rolling(7, min_periods=4).mean()
+        cdf["Load_Roll7_Mean"]  = cdf["Load_Lag1"].rolling(7, min_periods=4).mean()
 
         all_parts.append(cdf)
 
@@ -239,10 +228,10 @@ def main():
     df_daily = add_lags(df_daily)
     df_daily = add_country_profiles(df_daily)
     
-    # Drop rows with missing critical features (Lag365 needs 1 year of history)
+    # Drop rows with missing critical features (Lag30 needs 1 month of history)
     before = len(df_daily)
-    df_daily = df_daily.dropna(subset=["Price_Lag365", "Real_Wholesale_Price_EUR"])
-    print(f"\n[6] Dropped {before - len(df_daily)} rows (Lag365/Target NaN)")
+    df_daily = df_daily.dropna(subset=["Price_Lag30", "Real_Wholesale_Price_EUR"])
+    print(f"\n[6] Dropped {before - len(df_daily)} rows (Lag30/Target NaN)")
     print(f"   Remaining: {len(df_daily):,} day-country rows")
 
     # Check all feature columns present
